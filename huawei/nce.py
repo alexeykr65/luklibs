@@ -450,7 +450,7 @@ class NCE:
         log_net = self._networks_id[self._switches_id[lsw]['logicNetworkId']]['name']
         return log_net
 
-    def ports_print(self, sw, status, flt):
+    def ports_print(self, sw, status):
         self.run_dep_routines([self.get_devices, self.get_logic_sw, self.get_networks, self.get_endports])
         lst_sw = [i for i in self._switches['switch'] if re.search(sw, i['name'], re.IGNORECASE) and len(sw)>0 ]
         fields = {'NamePort': 'name', 'VLAN': 'vlan', 'PhysicalPort': 'physicalPortlist', 'EndPorts': 'endPort'}
