@@ -688,7 +688,6 @@ class NCE:
         self.cons.print(f"Total devices: {len(self._dev_list['devices'])}")
 
     def run_cmd(self, sw, gr, cmd, user, pwd, filter):
-        print(sw)
         luk = LukNornir(filter_hosts=sw, filter_groups=gr, user=user, passw=pwd)
         res = luk.run_tasks(cmd)
         if res:

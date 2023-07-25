@@ -36,8 +36,6 @@ class LukNornir:
 
     def __init__(self, user="", passw="", cfg_file="nornir.yaml", filter_roles="", filter_hosts="", filter_groups='all'):
         self.cons = Console()
-        if len(filter_groups) == 0:
-            filter_groups = 'all'
         dt = LukNornir.get_cfg('nornir.yaml')
         self.user = dt['username']
         self.passw = passw
