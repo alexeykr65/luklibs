@@ -34,7 +34,6 @@ from pathlib import Path
 class LukNornir:
     """Class for get information from routers"""
 
-
     def __init__(self, user="", passw="", cfg_file="nornir.yaml", filter_roles="", filter_hosts="", filter_groups='all'):
         self.cons = Console()
         if len(filter_groups) == 0:
@@ -80,13 +79,6 @@ class LukNornir:
         nr.inventory.defaults.username = self.user
         nr.inventory.defaults.password = self.passw
         return nr
-
-    # def get_config(self, task) -> None:
-    #     """
-    #     Get Configs from routers
-    #     """
-    #     cmd_config = "show running\n"
-    #     task.run(task=send_commands, commands=cmd_config.split(','))
 
     def send_command(self, task) -> None:
         """
@@ -176,11 +168,9 @@ class LukNornir:
                             if re.search(srch, st, re.IGNORECASE):
                                 output.append(st)
                                 flag_print = True
-                        # console.print("*" * 83, style = "yellow")
                     else:
                         output.append((jval.result).strip('\n'))
                         flag_print = True
-                        # self.print_body_result(str(jval.result).strip('\n'))
             if flag_print:
                 self.cons.print("*" * 83, style="yellow")
                 self.print_title_host(f'{i.upper()}', flag_center=True)
@@ -193,41 +183,6 @@ class LukNornir:
     def print_cmd(self, filter):
         self.display_result(srch=filter)
 
-    # print(args.hst)
-    # bpdb.set_trace()
-    # if args.run:
-    #     logger.debug("Get running configuration ...")
-    #     print_title_host(f'Get Configuration', flag_center=True)
-    #     result = router_hosts.run(task=get_config)
-    #     save_configs(result=result)
-
-    # if args.mac:
-    #     logger.debug("Get information about mac ...")
-    #     result = router_hosts.run(task=send_command)
-    #     search_mac_address(result=result)
-
-    # if args.logs:
-    #     logger.debug("Get Logs ...")
-    #     result = router_hosts.run(task=send_command)
-    #     analyze_logs(result=result)
-    #     # save_cmds(result=result)
-
-    # if args.inv:
-    #     logger.debug("Get inventory ...")
-    #     result = router_hosts.run(task=send_command)
-    #     save_inventory(result=result)
-
-    # if args.cmd:
-    #     logger.debug("Send commands ...")
-    #     # print_title_host(f'Send command', flag_center=True)
-    #     result = router_hosts.run(task=send_command)
-    #     save_cmds(result=result)
-
-    # if args.hw:
-    #     logger.debug("Send commands ...")
-    #     # print_title_host(f'Send command', flag_center=True)
-    #     result = router_hosts.run(task=send_command)
-    #     huawei_traffic_policy(result=result)
 
     def filter_hosts(self, host):
         return str(host).lower() in self._filter_hosts
