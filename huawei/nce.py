@@ -687,6 +687,13 @@ class NCE:
             self.cons.print(table)
         self.cons.print(f"Total devices: {len(self._dev_list['devices'])}")
 
+    def run_cmd(self, sw, gr, cmd, user, pwd, filter):
+        print(sw)
+        luk = LukNornir(filter_hosts=sw, filter_groups=gr, user=user, passw=pwd)
+        res = luk.run_tasks(cmd)
+        if res:
+            luk.print_cmd(filter)
+
     def huawei_traffic_policy(self, result):
         failed_hst = [i for i in result.failed_hosts]
         assert failed_hst != 0, "Connect to hosts failed !"

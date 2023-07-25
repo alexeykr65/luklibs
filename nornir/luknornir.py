@@ -33,10 +33,12 @@ from pathlib import Path
 
 class LukNornir:
     """Class for get information from routers"""
-    
+
 
     def __init__(self, user="", passw="", cfg_file="nornir.yaml", filter_roles="", filter_hosts="", filter_groups='all'):
         self.cons = Console()
+        if len(filter_groups) == 0:
+            filter_groups = 'all'
         dt = LukNornir.get_cfg('nornir.yaml')
         self.user = dt['username']
         self.passw = passw
@@ -56,6 +58,7 @@ class LukNornir:
         self.router_hosts = self.nr.filter(F(groups__any=filter_groups.split(',')))
         if filter_hosts != "":
             self.router_hosts = self.router_hosts.filter(F(name__any=filter_hosts.lower().split(',')))
+        # self.cons.print(f"Run on hosts: {[i for i in self.router_hosts.inventory.hosts]}")
 
     def init_nornir(self) -> nornir.core.Nornir:
         # InventoryPluginRegister.register("LabInventory", MyLabInventory)
@@ -136,7 +139,7 @@ class LukNornir:
             month = '0' + month
         filebits = [year, month, day, hour, minute]
         return '-'.join(filebits)
-    
+
     @staticmethod
     def get_cfg(fl):
         cfg_file = Path(Path.home(), f'inventory/{fl}')
@@ -150,39 +153,45 @@ class LukNornir:
         lf = int((80 - ln) / 2)
         rf = int(80 - ln - lf)
         if flag_center:
-            cons.print("*" * lf, f' [magenta]{title_txt}', "*" * rf)
+            self.cons.print("*" * lf, f' [magenta]{title_txt}', "*" * rf)
         else:
-            cons.print(f' [magenta]{title_txt}')
-    
+            self.cons.print(f' [magenta]{title_txt}')
+
     def print_body_result(self, body_txt, bg='') -> None:
         self.cons.print(f'[white]{body_txt}')
-        self.cons.print("*" * 83, style="yellow")
 
-    def display_result(self, skip_empty=False, view_res=True, srch=""):
-        if view_res:
-            for i, ival in self.result.items():
-                chk_res = ["OK" for j in ival if j.result]
-                if "OK" not in chk_res:
-                    continue
-                if i in self.failed_hst:
-                    continue
-                if srch != "":
-                    self.print_title_host(f'{i.upper()}', flag_center=True)
-                # bpdb.set_trace()
-                for jval in ival:
-                    if jval.result:
-                        if srch:
-                            if re.search(srch, jval.result, re.IGNORECASE):
-                                self.cons.print("*" * 83, style="yellow")
-                                self.print_title_host(f'{i.upper()}', flag_center=True)
-                            for st in jval.result.split("\n"):
-                                if re.search(srch, st, re.IGNORECASE):
-                                    self.cons.print(f'[white]{st}')
-                            # console.print("*" * 83, style = "yellow")
-                        else:
-                            self.print_body_result(str(jval.result).strip('\n'))
-        self.cons.print(f'\nFailed hosts: {",".join(self.failed_hst)} Total hosts: {len(self.result)}')
-     
+    def display_result(self, skip_empty=False, srch=""):
+        for i, ival in self.result.items():
+            output = list()
+            flag_print = False
+            chk_res = ["OK" for j in ival if j.result]
+            if "OK" not in chk_res:
+                continue
+            if i in self.failed_hst:
+                continue
+            for jval in ival:
+                if jval.result:
+                    if srch:
+                        for st in jval.result.split("\n"):
+                            if re.search(srch, st, re.IGNORECASE):
+                                output.append(st)
+                                flag_print = True
+                        # console.print("*" * 83, style = "yellow")
+                    else:
+                        output.append((jval.result).strip('\n'))
+                        flag_print = True
+                        # self.print_body_result(str(jval.result).strip('\n'))
+            if flag_print:
+                self.cons.print("*" * 83, style="yellow")
+                self.print_title_host(f'{i.upper()}', flag_center=True)
+                self.print_body_result("\n".join(output))
+        fld_connected = 0
+        if len(",".join(self.failed_hst)) > 0:
+            fld_connected = ",".join(self.failed_hst)
+        self.cons.print(f'\nFailed: {fld_connected} Total Switches: {len(self.result)}')
+
+    def print_cmd(self, filter):
+        self.display_result(srch=filter)
 
     # print(args.hst)
     # bpdb.set_trace()
@@ -239,34 +248,4 @@ class LukNornir:
     def load_data(self):
         return self._load_data
 
-    def get_config(self):
-        res = self._nor.run(task=self.run_cmds_task, cmds='show run')
-        for i in res:
-            to_file = ""
-            self.print_title_host(f'{i}', flag_center=True)
-            for j in range(1, len(res[i])):
-                self.print_title_result(f'{res[i][j].name}')
-                self.print_body_result(f'{str(res[i][j])}')
-                to_file += f'{i}#{res[i][j].name}\n'
-                to_file += f'{res[i][j]}\n\n\n'
-            if self._save_to_file:
-                self.write_to_file(i.lower(), to_file, flag_config=True)
-
-    def get_cdp(self, out_dir=""):
-        if out_dir:
-            tmp_dir = self._output_dir
-            self._output_dir = out_dir
-        res = self._nor.run(task=self.run_cmds_task, cmds='show cdp nei deta')
-        for i in res:
-            to_file = ""
-            self.print_title_host(f'{i}', flag_center=True)
-            for j in range(1, len(res[i])):
-                self.print_title_result(f'{res[i][j].name}')
-                self.print_body_result(f'{str(res[i][j])}')
-                to_file += f'{i}#{res[i][j].name}\n'
-                to_file += f'{res[i][j]}\n\n\n'
-            if self._save_to_file:
-                self.write_to_file(i.lower(), to_file, flag_config=True)
-        if out_dir:
-            self._output_dir = tmp_dir
 
