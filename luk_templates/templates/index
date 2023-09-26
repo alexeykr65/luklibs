@@ -1,0 +1,23 @@
+# First line is the header fields for columns and is mandatory.
+# Regular expressions are supported in all fields except the first.
+# Last field supports variable length command completion.
+# abc[[xyz]] is expanded to abc(x(y(z)?)?)?, regexp inside [[]] is not supported
+#
+# Rules of Ordering:
+#  - OS in alphabetical order
+#  - Template name in length order (longest to shortest)
+#  - When Length is the same, use alphabetical order
+#  - Keep space between OS's
+#
+Template, Hostname, Platform, Command
+
+cisco_xr_show_bgp_neighbors_short.textfsm, .*, cisco_xr, sh[[ow]] bg[[p]] nei[[ghbors]] short
+cisco_xr_show_bgp_neighbors.textfsm, .*, cisco_xr, sh[[ow]] bg[[p]] nei[[ghbors]]
+cisco_xr_show_bgp_vrf_all_neighbors.textfsm, .*, cisco_xr, sh[[ow]] bg[[p]] vrf all nei[[ghbors]]
+cisco_xr_show_interfaces.textfsm, .*, cisco_xr, sh[[ow]] interfaces
+
+huawei_vrp_display_lldp_neighbor.textfsm, .*, huawei_vrp, dis[[play]] lldp nei[[ghbor]]
+huawei_vrp_display_arp_all.textfsm,.*,huawei_vrp, dis[[play]] arp
+
+
+

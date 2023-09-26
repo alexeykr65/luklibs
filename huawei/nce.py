@@ -17,6 +17,7 @@ from collections import defaultdict
 from ciscoconfparse import CiscoConfParse
 from ipaddress import IPv4Network
 from luklibs.nornir.luknornir import LukNornir
+from luklibs.luk_templates import parse
 
 description = "Get information from Huawei NCE Fabric"
 
@@ -799,5 +800,171 @@ class NCE:
             tbl.add_column("Name Parameter")
             tbl.add_column("Value Parameter")
             tbl.add_row("ACL RULES", '\n'.join(val['acl_rules']))
+            tbl.add_row("BEHAVIOR", '\n'.join(val['behav_rules']))
+            self.cons.print(tbl)
+
+    def get_mac_addresses(self, user, pwd, fabric, mac, flag_verbose):
+        ip_flag = False
+        res = ""
+        if flag_verbose:
+            print("Verbose Mode")
+        if re.search(r'srt', fabric):
+            fabric = 'nce_srt'
+        if re.search(r'krv', fabric):
+            fabric = 'nce_krv'
+        if re.match(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', mac):
+            self.cons.print(f"IP address: {mac}")
+            ip_flag = True
+        elif len(mac) >= 12:
+            res, _ = re.subn('[.:-]', '', mac)
+            mac = '-'.join([res[i:i+4] for i in range(0, len(res), 4)])
+            self.cons.print(f"MAC: {mac}")
+        luk = LukNornir(filter_hosts="", filter_groups=fabric, user=user, passw=pwd)
+        if ip_flag:
+            if flag_verbose:
+                self.cons.log("In verbose mode(option -v) use only mac address, not ip address")
+                exit(1)
+            cmd = f"dis arp | i {mac}"
+            res = luk.run_tasks(cmd)
+        elif flag_verbose:
+            cmd = f"dis mac-addr dyn verbose"
+            res1 = luk.run_tasks(cmd)
+            cmd = f"dis arp | i {mac}"
+            res2 = luk.run_tasks(cmd)
+        else:
+            cmd = f"dis mac-addr dyn | i {mac}, dis arp | i {mac}, dis mac-add evn | i {mac}"
+            res = luk.run_tasks(cmd)
+
+        if flag_verbose:
+            ipaddr = dict()
+            for i, ival in res2.items():
+                for jval in ival:
+                    if jval.result:
+                        arp_parse = parse.parse_output(platform="huawei_vrp", command="dis arp", data=jval.result)
+                        ipaddr[i] = '\n'.join([f"     {arp['ip_address']:20s}    {arp['type']:15s}    {arp['interface']:20s} {arp['vpn_instance']:20s}" for arp in arp_parse ])
+                        # for s in jval.result.split('\n'):
+                        #     if re.search(mac, s):
+                        #         ipaddr[i] = s
+            for i, ival in res1.items():
+                for jval in ival:
+                    if jval.result:
+                        # bpdb.set_trace()
+                        # print(f"{jval.result}")
+                        rslt = self.parse_mac_verbose(jval.result)
+                        # print("parse: OK")
+                        for k in rslt:
+                            if re.search(mac, k['mac_addr']):
+                                self.cons.print("*" * 83, style="yellow")
+                                luk.print_title_host(f"{i.upper()} (MAC Total: {len(rslt)})", flag_center=True)
+                                luk.print_body_result(f"MAC: {k['mac_addr']} VLAN/BD: {k['vlan_bd']:12s} FROM: {k['mac_from']:20s} PEVLAN: {k['pevlan']:5s} CEVLAN: {k['cevlan']:5s}")
+
+                                luk.print_body_result(f"{ipaddr[i]}")
+        else:
+            if res:
+                luk.print_cmd(mac)
+
+    @staticmethod
+    def parse_mac_verbose(res):
+        l = [i for i in res.split('\n')]
+        trn = l[3:-2]
+        recs = list()
+        prs = [trn[i:i + 4] for i in range(0, len(trn), 4)]
+        # print(len(prs))
+        for i in prs:
+            rec = dict()
+            rec['mac_addr'] = i[0].split()[2]
+            rec['vlan_bd'] = i[0].split()[5]
+            rec['mac_from'] = i[1].split()[5]
+            rec['pevlan'] = i[2].split()[2]
+            rec['cevlan'] = i[2].split()[5]
+            recs.append(rec)
+        # print(f"{mac_addr} = {vlan_bd} = {mac_from} = {cevlan} = {pevlan}")
+        # print(f"{recs}")
+        return recs
+
+    def tpol_global(self, hst="", user="", pwd=""):
+        lst_sw = hst.split(',')
+        print(f"Host Connected to: {' '.join(lst_sw)}")
+        luk = LukNornir(filter_hosts=','.join(lst_sw), user=user, passw=pwd)
+        res = luk.run_tasks("dis cur")
+        failed_hst = [i for i in res.failed_hosts]
+        assert failed_hst != 0, "Connect to hosts failed !"
+        # display_result(result)
+        for i, ival in res.items():
+            if i.lower() not in failed_hst:
+                self.get_tp_global(sw_cfg=[j for j in ival[1].result.split('\n')])
+
+
+    def get_tp_global(self, sw_cfg=""):
+        tpol_global = "tp_pv_pbr_global"
+        conf_intrf = dict()
+        parse = CiscoConfParse(sw_cfg)
+        prs = parse.find_objects(f"^traffic policy {tpol_global}")[0]
+        # print(prs)
+        classif = dict()
+        for i in prs.children:
+            chk = re.compile(r'^\sclassifier\s(.*)\sbehavior\s(.*)\sprecedence\s(\d+)$')
+            res = chk.match(i.text)
+            if res:
+                classif[int(res.groups()[2])] = {
+                    'classif': res.groups()[0],
+                    'behav': res.groups()[1],
+                    'acl': list(),
+                    'acl_rules': list(),
+                    'vxlan': list(),
+                    'behav_rules': list(),
+                }
+        for j, val in classif.items():
+            srch = str(val['classif']).replace('+', '\\+')
+            prs = parse.find_objects(f"^traffic classifier {srch}")
+            if len(prs) == 0:
+                continue
+            prs = prs[0]
+            for i in prs.children:
+                if re.search(r'acl', i.text):
+                    chk = re.compile(r'^\sif-match\sacl\s(.*)$')
+                    res = chk.match(i.text)
+                    if res:
+                        classif[j]['acl'].append(res.groups()[0])
+                if re.search(r'vxlan', i.text):
+                    chk = re.compile(r'^\sif-match\svxlan\s(vni\s.*)$')
+                    res = chk.match(i.text)
+                    if res:
+                        classif[j]['vxlan'].append(res.groups()[0])
+                    chk = re.compile(r'^\sif-match\svxlan\sacl\s(.*)$')
+                    res = chk.match(i.text)
+                    if res:
+                        classif[j]['acl'].append(res.groups()[0])
+        for j, val in classif.items():
+            for f in val['acl']:
+                srch = str(f).replace('+', '\\+')
+                prs = parse.find_objects(f"^acl\sname\s{srch}\sadvance")
+                assert len(prs) != 0, "Check progamm, did not find object !!!"
+                prs = prs[0]
+                # print(prs)
+                for i in prs.children:
+                    rules = i.text
+                    classif[j]['acl_rules'].append(rules)
+        for j, val in classif.items():
+            srch = str(val['behav']).replace('+', '\\+')
+            prs = parse.find_objects(f"^traffic\sbehavior\s{srch}")
+            assert len(prs) != 0, "Check progamm, did not find object !!!"
+            prs = prs[0]
+            for i in prs.children:
+                classif[j]['behav_rules'].append(i.text.strip())
+        # print(json.dumps(classif, indent=4))
+        # s_child = ' \n'.join(conf_intrf[interface_name])
+        # s = f"interface {interface_name}\n{s_child}"
+        # self.cons.print(s)
+
+        for j, val in classif.items():
+            tbl = Table(title=f"\n[magenta]Precedence: [bold white]{j}[/bold white][/magenta]", show_lines=True, title_justify='left')
+            tbl.box = box.DOUBLE
+            tbl.add_column("Name Parameter")
+            tbl.add_column("Value Parameter")
+            if len(val['acl_rules']) > 0:
+                tbl.add_row("CLASSIFIER(match)", '\n'.join(val['acl_rules']))
+            if len(val['vxlan']) > 0:
+                tbl.add_row("CLASSIFIER(match)", '\n'.join(val['vxlan']))
             tbl.add_row("BEHAVIOR", '\n'.join(val['behav_rules']))
             self.cons.print(tbl)
