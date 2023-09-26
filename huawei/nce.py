@@ -805,6 +805,7 @@ class NCE:
 
     def get_mac_addresses(self, user, pwd, fabric, mac, flag_verbose):
         ip_flag = False
+        mac = mac.lower()
         res = ""
         if flag_verbose:
             print("Verbose Mode")
